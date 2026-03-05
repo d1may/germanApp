@@ -32,3 +32,6 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Accidental full-path-as-folder duplicates
+home/
