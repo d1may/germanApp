@@ -20,11 +20,14 @@ def list_vocabulary(
     tag: str | None = None,
     search: str | None = None,
     sort: str = Query("newest", description="newest or oldest by created_at"),
+    important_only: bool = False,
     db: Session = Depends(get_db),
 ):
     stmt = select(Vocabulary)
     if tag:
         stmt = stmt.where(Vocabulary.tags.contains(tag))
+    if important_only:
+        stmt = stmt.where(Vocabulary.important == True)
     if search:
         pattern = f"%{search}%"
         stmt = stmt.where(

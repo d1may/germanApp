@@ -22,6 +22,7 @@ class VocabularyUpdate(BaseModel):
     translation: str | None = Field(None, max_length=200)
     example: str | None = None
     tags: str | None = Field(None, max_length=500)
+    important: bool | None = None
 
 
 class VocabularyRead(VocabularyBase):
@@ -29,6 +30,7 @@ class VocabularyRead(VocabularyBase):
     correct_count: int
     wrong_count: int
     weight: float
+    important: bool
     created_at: datetime
     updated_at: datetime
 

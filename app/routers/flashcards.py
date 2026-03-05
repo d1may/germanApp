@@ -21,12 +21,15 @@ def _pick_weighted(vocab_list: list[Vocabulary]) -> Vocabulary:
 def next_flashcard(
     tag: str | None = None,
     direction: str = "de_to_en",
+    important_only: bool = False,
     db: Session = Depends(get_db),
 ):
     """Get the next flashcard. `direction` is 'de_to_en' or 'en_to_de'."""
     stmt = select(Vocabulary)
     if tag:
         stmt = stmt.where(Vocabulary.tags.contains(tag))
+    if important_only:
+        stmt = stmt.where(Vocabulary.important == True)
     all_vocab = db.scalars(stmt).all()
     if not all_vocab:
         raise HTTPException(404, "No vocabulary words found")

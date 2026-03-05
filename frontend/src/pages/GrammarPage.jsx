@@ -90,10 +90,10 @@ export default function GrammarPage() {
   )
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h1 className="text-xl font-bold">Grammar Rules</h1>
-        <button onClick={openCreate} className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-950 text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+        <button onClick={openCreate} className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-950 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors min-h-[44px] touch-manipulation w-full sm:w-auto">
           <Plus size={16} /> Add Rule
         </button>
       </div>
@@ -117,18 +117,18 @@ export default function GrammarPage() {
           {items.map((rule) => (
             <div key={rule.id} className="border border-gray-800 rounded-xl overflow-hidden bg-gray-900/40">
               <div
-                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-900 transition-colors"
+                className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-900 transition-colors touch-manipulation min-h-[48px]"
                 onClick={() => toggle(rule.id)}
               >
                 {expanded.has(rule.id) ? <ChevronDown size={16} className="text-gray-500 shrink-0" /> : <ChevronRight size={16} className="text-gray-500 shrink-0" />}
-                <span className="font-medium text-amber-300 flex-1">{rule.title}</span>
-                <div className="flex items-center gap-2">
-                  {rule.tags?.split(',').filter(Boolean).map((t) => <TagBadge key={t} tag={t.trim()} />)}
-                  <button onClick={(e) => { e.stopPropagation(); openEdit(rule) }} className="p-1.5 rounded-md text-gray-500 hover:text-amber-400 hover:bg-gray-800 transition-colors">
-                    <Pencil size={14} />
+                <span className="font-medium text-amber-300 flex-1 min-w-0 truncate">{rule.title}</span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {rule.tags?.split(',').filter(Boolean).slice(0, 3).map((t) => <TagBadge key={t} tag={t.trim()} />)}
+                  <button onClick={(e) => { e.stopPropagation(); openEdit(rule) }} className="p-2 rounded-lg text-gray-500 hover:text-amber-400 hover:bg-gray-800 transition-colors touch-manipulation">
+                    <Pencil size={16} />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(rule.id) }} className="p-1.5 rounded-md text-gray-500 hover:text-red-400 hover:bg-gray-800 transition-colors">
-                    <Trash2 size={14} />
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(rule.id) }} className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-gray-800 transition-colors touch-manipulation">
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>

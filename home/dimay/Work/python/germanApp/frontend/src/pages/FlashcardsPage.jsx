@@ -1,17 +1,15 @@
 import { useState } from 'react'
 import { flashcards } from '../api'
-import { ArrowRight, RotateCcw, Check, X, Star } from 'lucide-react'
+import { ArrowRight, RotateCcw, Check, X } from 'lucide-react'
 import { STRONG_VERBS, partizipDisplay } from '../data/strongVerbs'
-import { getImportantVerbs } from '../data/importantVerbs'
 
 const CEFR_TAGS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const COMMON_TAGS = ['animals', 'food', 'verbs', 'nouns', 'adjectives']
 
 export default function FlashcardsPage() {
-  const [mode, setMode] = useState('vocabulary')
+  const [mode, setMode] = useState('vocabulary') // vocabulary | strong_verbs
   const [tagFilter, setTagFilter] = useState('')
   const [customTag, setCustomTag] = useState('')
-  const [vocabImportantOnly, setVocabImportantOnly] = useState(false)
   const [direction, setDirection] = useState('de_to_en')
   const [card, setCard] = useState(null)
   const [answer, setAnswer] = useState('')
@@ -19,8 +17,7 @@ export default function FlashcardsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState({ correct: 0, wrong: 0 })
-  const [verbQuestionType, setVerbQuestionType] = useState('partizip')
-  const [verbFilter, setVerbFilter] = useState('all') // all | important
+  const [verbQuestionType, setVerbQuestionType] = useState('partizip') // partizip | praeteritum
 
   const effectiveTag = customTag.trim() || tagFilter
 
@@ -36,7 +33,6 @@ export default function FlashcardsPage() {
     try {
       const params = { direction }
       if (effectiveTag) params.tag = effectiveTag
-      if (vocabImportantOnly) params.important_only = 'true'
       setCard(await flashcards.next(params))
     } catch (e) {
       setError(e.message)
@@ -47,26 +43,21 @@ export default function FlashcardsPage() {
   }
 
   function loadNextStrongVerb() {
-    const important = getImportantVerbs()
-    const pool = verbFilter === 'important' && important.size > 0
-      ? STRONG_VERBS.filter((v) => important.has(v.infinitive))
-      : STRONG_VERBS
-    if (pool.length === 0) {
-      setCard(null)
-      setError(verbFilter === 'important' ? 'No important verbs. Mark some on the Strong Verbs page.' : 'No verbs.')
-      return
-    }
-    const v = pool[Math.floor(Math.random() * pool.length)]
+    const idx = Math.floor(Math.random() * STRONG_VERBS.length)
+    const v = STRONG_VERBS[idx]
     const expected = verbQuestionType === 'partizip' ? partizipDisplay(v) : v.praeteritum
     setCard({ ...v, expected, type: 'strong_verb' })
+    setError(null)
   }
 
   function loadNext() {
     setResult(null)
     setAnswer('')
-    setError(null)
-    if (mode === 'strong_verbs') loadNextStrongVerb()
-    else loadNextVocabulary()
+    if (mode === 'strong_verbs') {
+      loadNextStrongVerb()
+    } else {
+      loadNextVocabulary()
+    }
   }
 
   async function submitVocabularyAnswer(e) {
@@ -74,8 +65,11 @@ export default function FlashcardsPage() {
     if (!card || !answer.trim() || card.type === 'strong_verb') return
     setLoading(true)
     try {
-      const res = await flashcards.answer({ vocabulary_id: card.vocabulary_id, answer: answer.trim() }, direction)
-      setResult(res)
+      const res = await flashcards.answer(
+        { vocabulary_id: card.vocabulary_id, answer: answer.trim() },
+        direction
+      )
+      setResult({ ...res, type: 'vocabulary' })
       setStats((s) => ({
         correct: s.correct + (res.is_correct ? 1 : 0),
         wrong: s.wrong + (res.is_correct ? 0 : 1),
@@ -97,6 +91,7 @@ export default function FlashcardsPage() {
       is_correct: isCorrect,
       correct_count: 0,
       wrong_count: 0,
+      type: 'strong_verb',
     })
     setStats((s) => ({
       correct: s.correct + (isCorrect ? 1 : 0),
@@ -117,7 +112,10 @@ export default function FlashcardsPage() {
 
       {/* Mode toggle */}
       <div className="flex gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800 mb-4">
-        {[['vocabulary', 'Vocabulary'], ['strong_verbs', 'Strong Verbs']].map(([val, label]) => (
+        {[
+          ['vocabulary', 'Vocabulary'],
+          ['strong_verbs', 'Strong Verbs'],
+        ].map(([val, label]) => (
           <button
             key={val}
             onClick={() => { setMode(val); resetCard(); setError(null) }}
@@ -132,29 +130,9 @@ export default function FlashcardsPage() {
 
       {/* Filters */}
       {mode === 'vocabulary' && (
-        <div className="mb-4 space-y-3">
-          <div>
-            <p className="text-xs text-gray-500 mb-2">Vocabulary set</p>
-            <div className="flex gap-1">
-              {[['all', 'All'], ['important', 'Important only']].map(([val, label]) => (
-                <button
-                  key={val}
-                  onClick={() => { setVocabImportantOnly(val === 'important'); resetCard() }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                    (val === 'important' && vocabImportantOnly) || (val === 'all' && !vocabImportantOnly)
-                      ? 'bg-amber-500 text-gray-950'
-                      : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {val === 'important' && <Star size={12} fill={vocabImportantOnly ? 'currentColor' : 'none'} />}
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-2">Filter by tag</p>
-            <div className="flex flex-wrap gap-2">
+        <div className="mb-4 space-y-2">
+          <p className="text-xs text-gray-500">Filter by tag</p>
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => { setTagFilter(''); setCustomTag(''); resetCard() }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -192,33 +170,18 @@ export default function FlashcardsPage() {
               onChange={(e) => { setCustomTag(e.target.value); setTagFilter(''); resetCard() }}
               className="w-28 px-2 py-1.5 rounded-md text-xs bg-gray-800 border border-gray-700 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
             />
-            </div>
           </div>
         </div>
       )}
 
       {mode === 'strong_verbs' && (
-        <div className="mb-4 space-y-3">
-          <div>
-            <p className="text-xs text-gray-500 mb-2">Verb set</p>
-            <div className="flex gap-1">
-              {[['all', 'All'], ['important', 'Important only']].map(([val, label]) => (
-                <button
-                  key={val}
-                  onClick={() => { setVerbFilter(val); resetCard() }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    verbFilter === val ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-2">Ask for</p>
-            <div className="flex gap-1">
-            {[['partizip', 'Partizip II'], ['praeteritum', 'Präteritum']].map(([val, label]) => (
+        <div className="mb-4">
+          <p className="text-xs text-gray-500 mb-2">Ask for</p>
+          <div className="flex gap-1">
+            {[
+              ['partizip', 'Partizip II'],
+              ['praeteritum', 'Präteritum'],
+            ].map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => { setVerbQuestionType(val); resetCard() }}
@@ -229,28 +192,29 @@ export default function FlashcardsPage() {
                 {label}
               </button>
             ))}
-            </div>
           </div>
         </div>
       )}
 
-      {/* Direction (vocabulary) + stats */}
+      {/* Direction (vocabulary only) + stats */}
       <div className="flex items-center justify-between mb-4 md:mb-6">
         {mode === 'vocabulary' ? (
-        <div className="flex gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800">
-          {[['de_to_en', 'DE → EN'], ['en_to_de', 'EN → DE']].map(([val, label]) => (
-            <button
-              key={val}
-              onClick={() => { setDirection(val); resetCard() }}
-              className={`px-4 py-2.5 rounded-md text-sm font-medium transition-colors touch-manipulation min-h-[44px] ${
-                direction === val ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        ) : <div />}
+          <div className="flex gap-1 bg-gray-900 rounded-lg p-1 border border-gray-800">
+            {[['de_to_en', 'DE → EN'], ['en_to_de', 'EN → DE']].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => { setDirection(val); resetCard() }}
+                className={`px-4 py-2.5 rounded-md text-sm font-medium transition-colors touch-manipulation min-h-[44px] ${
+                  direction === val ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
         {total > 0 && (
           <div className="text-sm text-gray-500">
             <span className="text-green-400 font-medium">{stats.correct}</span>
@@ -261,7 +225,7 @@ export default function FlashcardsPage() {
         )}
       </div>
 
-      {/* start / card */}
+      {/* Start / card */}
       {!card && !error && (
         <button
           onClick={loadNext}
@@ -276,7 +240,9 @@ export default function FlashcardsPage() {
       {error && (
         <div className="rounded-xl bg-gray-900 border border-gray-800 p-6 text-center">
           <p className="text-gray-400 text-sm mb-3">{error}</p>
-          <button onClick={loadNext} className="text-amber-400 text-sm font-medium hover:underline">Try again</button>
+          <button onClick={loadNext} className="text-amber-400 text-sm font-medium hover:underline">
+            Try again
+          </button>
         </div>
       )}
 
@@ -292,8 +258,16 @@ export default function FlashcardsPage() {
               </>
             ) : (
               <>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">{direction === 'de_to_en' ? 'Translate to English' : 'Translate to German'}</p>
-                <p className="text-xl md:text-2xl font-bold text-amber-300">{(card.prompt && card.prompt.includes(': ')) ? card.prompt.split(': ')[1] : (direction === 'de_to_en' ? card.word : card.translation)}</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">
+                  {direction === 'de_to_en' ? 'Translate to English' : 'Translate to German'}
+                </p>
+                <p className="text-xl md:text-2xl font-bold text-amber-300">
+                  {(card.prompt && card.prompt.includes(': '))
+                    ? card.prompt.split(': ')[1]
+                    : direction === 'de_to_en'
+                      ? card.word
+                      : card.translation}
+                </p>
               </>
             )}
           </div>
@@ -301,11 +275,19 @@ export default function FlashcardsPage() {
             <input
               autoFocus
               className="flex-1 rounded-lg bg-gray-800 border border-gray-700 px-3 py-2.5 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-              placeholder={card.type === 'strong_verb' && verbQuestionType === 'partizip' ? 'e.g. ist gegangen' : 'Your answer...'}
+              placeholder={
+                card.type === 'strong_verb' && verbQuestionType === 'partizip'
+                  ? 'e.g. ist gegangen'
+                  : 'Your answer...'
+              }
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
             />
-            <button type="submit" disabled={loading} className="bg-amber-500 hover:bg-amber-400 text-gray-950 px-5 py-2.5 rounded-lg transition-colors touch-manipulation min-h-[44px] shrink-0">
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-amber-500 hover:bg-amber-400 text-gray-950 px-5 py-2.5 rounded-lg transition-colors touch-manipulation min-h-[44px] shrink-0"
+            >
               <ArrowRight size={18} />
             </button>
           </form>
@@ -314,13 +296,22 @@ export default function FlashcardsPage() {
 
       {result && (
         <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
-          <div className={`px-4 py-4 md:px-6 md:py-6 text-center ${result.is_correct ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+          <div
+            className={`px-4 py-4 md:px-6 md:py-6 text-center ${
+              result.is_correct ? 'bg-green-500/10' : 'bg-red-500/10'
+            }`}
+          >
             <div className="flex items-center justify-center gap-2 mb-2">
-              {result.is_correct
-                ? <Check size={20} className="text-green-400" />
-                : <X size={20} className="text-red-400" />
-              }
-              <span className={`font-semibold text-sm md:text-base ${result.is_correct ? 'text-green-400' : 'text-red-400'}`}>
+              {result.is_correct ? (
+                <Check size={20} className="text-green-400" />
+              ) : (
+                <X size={20} className="text-red-400" />
+              )}
+              <span
+                className={`font-semibold text-sm md:text-base ${
+                  result.is_correct ? 'text-green-400' : 'text-red-400'
+                }`}
+              >
                 {result.is_correct ? 'Correct!' : 'Wrong'}
               </span>
             </div>
@@ -333,7 +324,9 @@ export default function FlashcardsPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Your answer</span>
-              <span className={result.is_correct ? 'text-green-400' : 'text-red-400'}>{result.your_answer}</span>
+              <span className={result.is_correct ? 'text-green-400' : 'text-red-400'}>
+                {result.your_answer}
+              </span>
             </div>
           </div>
           <div className="px-4 pb-4 md:px-6 md:pb-5">
@@ -352,7 +345,18 @@ export default function FlashcardsPage() {
 
 function Layers(props) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={props.size || 24}
+      height={props.size || 24}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
       <path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" />
       <path d="m22.4 10.08-8.58 3.91a2 2 0 0 1-1.66 0l-8.58-3.9" />
       <path d="m22.4 14.08-8.58 3.91a2 2 0 0 1-1.66 0l-8.58-3.9" />

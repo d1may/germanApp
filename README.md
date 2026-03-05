@@ -1,6 +1,6 @@
 # German Language Learning App
 
-A German learning app with vocabulary, grammar rules, flashcards, and an AI tutor.
+A German learning app with vocabulary, grammar rules, strong verbs, flashcards, and an AI tutor.
 
 ## Stack
 
@@ -55,17 +55,25 @@ Open http://localhost:5173
 - CRUD for words (word, translation, example, tags)
 - Filter by level (A1–C2) and search
 - Sort by date added (newest/oldest)
+- **Important** — star button to mark words, filter to show important only
 - **Export CSV** — download vocabulary as CSV
 - **Import CSV** — upload from CSV (with or without headers)
+
+### Strong Verbs (Starke Verben)
+- Table of strong verbs (Infinitiv, Präteritum, Partizip II)
+- Search by verb form or translation
+- Star to mark verbs as important (stored in localStorage)
+- Filter to show important verbs only
 
 ### Grammar
 - CRUD for rules (title, content, tags)
 - Search and filter by tags
 
 ### Flashcards
-- Weighted cards: words you get wrong appear more often
-- Two modes: DE → EN and EN → DE
-- Automatic weight adjustment based on answers
+- Two modes: **Vocabulary** and **Strong Verbs**
+- **Vocabulary:** weighted cards (words you get wrong appear more often), DE → EN or EN → DE, filter by tag, **Important only**
+- **Strong Verbs:** Partizip II or Präteritum, **Important only** filter
+- Automatic weight adjustment for vocabulary answers
 
 ### Chat (AI Tutor)
 - Chat with GPT that knows your vocabulary and grammar

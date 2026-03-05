@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -17,6 +17,7 @@ class Vocabulary(Base):
     correct_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     wrong_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     weight: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
+    important: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )
