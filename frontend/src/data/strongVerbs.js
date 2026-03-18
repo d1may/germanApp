@@ -53,6 +53,8 @@ export const STRONG_VERBS = [
   { infinitive: 'waschen', praeteritum: 'wusch', partizip: 'gewaschen', aux: 'haben', translation: 'to wash' },
   { infinitive: 'weichen', praeteritum: 'wich', partizip: 'gewichen', aux: 'sein', translation: 'to yield' },
   { infinitive: 'ziehen', praeteritum: 'zog', partizip: 'gezogen', aux: 'haben', translation: 'to pull' },
+  { infinitive: 'verlieren', praeteritum: 'verlor', partizip: 'verloren', aux: 'haben', translation: 'to lose' },
+  { infinitive: 'gewinnen', praeteritum: 'gewann', partizip: 'gewonnen', aux: 'haben', translation: 'to win' },
 ]
 
 export function partizipDisplay(v) {

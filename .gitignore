@@ -35,3 +35,6 @@ Thumbs.db
 
 # Accidental full-path-as-folder duplicates
 home/
+
+# Accidental stray files
+/git
