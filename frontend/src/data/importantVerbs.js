@@ -1,8 +1,14 @@
-const STORAGE_KEY = 'germanApp_important_verbs'
+const BASE_KEY = 'germanApp_important_verbs'
 
-export function getImportantVerbs() {
+function keyForUser(userId) {
+  if (userId == null) return `${BASE_KEY}_anon`
+  return `${BASE_KEY}_u${userId}`
+}
+
+export function getImportantVerbs(userId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const k = keyForUser(userId)
+    const raw = localStorage.getItem(k) ?? localStorage.getItem(BASE_KEY)
     if (!raw) return new Set()
     const arr = JSON.parse(raw)
     return new Set(Array.isArray(arr) ? arr : [])
@@ -11,17 +17,17 @@ export function getImportantVerbs() {
   }
 }
 
-export function setImportantVerbs(set) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]))
+export function setImportantVerbs(userId, set) {
+  localStorage.setItem(keyForUser(userId), JSON.stringify([...set]))
 }
 
-export function toggleImportant(infinitive) {
-  const set = getImportantVerbs()
+export function toggleImportant(userId, infinitive) {
+  const set = getImportantVerbs(userId)
   if (set.has(infinitive)) {
     set.delete(infinitive)
   } else {
     set.add(infinitive)
   }
-  setImportantVerbs(set)
+  setImportantVerbs(userId, set)
   return set
 }

@@ -22,6 +22,12 @@ Create `.env` in the project root:
 ```
 OPENAI_API_KEY=sk-your-key-here
 DATABASE_URL=sqlite:///./german_app.db
+JWT_SECRET=dev-change-me
+FRONTEND_ORIGINS=http://localhost:5173
+COOKIE_SECURE=false
+COOKIE_SAMESITE=lax
+DEFAULT_ADMIN_USERNAME=admin
+DEFAULT_ADMIN_PASSWORD=admin
 ```
 
 ## Run
@@ -48,6 +54,34 @@ cd frontend && npm install && npm run dev
 ```
 
 Open http://localhost:5173
+
+## Auth (local accounts)
+
+- Register: `POST /auth/register`
+- Login: `POST /auth/login` (sets HttpOnly `access_token` cookie)
+- Logout: `POST /auth/logout`
+- Current user: `GET /auth/me`
+
+All learning data is scoped per-user (vocabulary/grammar/flashcards/chat).
+
+## Google OAuth (next step)
+
+When you’re ready to add a “Sign in with Google” button:
+
+1. Create OAuth credentials in **Google Cloud Console**:
+   - OAuth consent screen (External/Internal)
+   - OAuth Client ID (Web application)
+2. Configure redirect URIs (examples for dev):
+   - `http://localhost:8000/auth/google/callback`
+3. Add env vars:
+   - `GOOGLE_CLIENT_ID=...`
+   - `GOOGLE_CLIENT_SECRET=...`
+   - `GOOGLE_REDIRECT_URI=http://localhost:8000/auth/google/callback`
+4. Backend endpoints to implement:
+   - `GET /auth/google/login` → redirect to Google auth URL
+   - `GET /auth/google/callback` → exchange code → get user info → create/find user → set `access_token` cookie → redirect to frontend
+5. Frontend:
+   - Add a button on `/login` that navigates to `/auth/google/login`
 
 ## Features
 

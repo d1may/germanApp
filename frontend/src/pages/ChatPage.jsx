@@ -2,12 +2,11 @@ import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { chat } from '../api'
+import { useAuth } from '../auth'
 
-const CHAT_STORAGE_KEY = 'germanApp_chat_messages'
-
-function loadStoredMessages() {
+function loadStoredMessages(storageKey) {
   try {
-    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey)
     if (!raw) return []
     const data = JSON.parse(raw)
     return Array.isArray(data) ? data : []
@@ -17,25 +16,31 @@ function loadStoredMessages() {
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState(loadStoredMessages)
+  const { user } = useAuth()
+  const storageKey = user ? `germanApp_chat_messages_u${user.id}` : 'germanApp_chat_messages_anon'
+
+  const [messages, setMessages] = useState(() => loadStoredMessages(storageKey))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
   useEffect(() => {
+    setMessages(loadStoredMessages(storageKey))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
   useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages))
-    }
-  }, [messages])
+    localStorage.setItem(storageKey, JSON.stringify(messages))
+  }, [messages, storageKey])
 
   function clearChat() {
     setMessages([])
-    localStorage.removeItem(CHAT_STORAGE_KEY)
+    localStorage.removeItem(storageKey)
   }
 
   async function handleSend(e) {

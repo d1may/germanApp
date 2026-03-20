@@ -3,6 +3,29 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+# --- Auth / User ---
+
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    email: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=100)
+    email: str | None = Field(None, max_length=320)
+    password: str = Field(..., min_length=8, max_length=256)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=100)
+    password: str = Field(..., min_length=1, max_length=256)
+
+
 # --- Vocabulary ---
 
 

@@ -7,7 +7,8 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Vocabulary
+from app.deps import get_current_user
+from app.models import User, Vocabulary
 from app.schemas import VocabularyCreate, VocabularyRead, VocabularyUpdate
 
 router = APIRouter(prefix="/vocabulary", tags=["vocabulary"])
@@ -21,9 +22,10 @@ def list_vocabulary(
     search: str | None = None,
     sort: str = Query("newest", description="newest or oldest by created_at"),
     important_only: bool = False,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = select(Vocabulary)
+    stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
     if tag:
         stmt = stmt.where(Vocabulary.tags.contains(tag))
     if important_only:
@@ -43,10 +45,11 @@ def export_vocabulary_csv(
     tag: str | None = None,
     search: str | None = None,
     sort: str = Query("newest", description="newest or oldest by created_at"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Export vocabulary as CSV. Uses same filters as list (tag, search)."""
-    stmt = select(Vocabulary)
+    stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
     if tag:
         stmt = stmt.where(Vocabulary.tags.contains(tag))
     if search:
@@ -81,6 +84,7 @@ def export_vocabulary_csv(
 @router.post("/import")
 def import_vocabulary_csv(
     file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Import vocabulary from CSV. Supports: 1) Header row (word, translation, example, tags)
@@ -118,7 +122,13 @@ def import_vocabulary_csv(
             continue
         example = (row[2] or "").strip() or None if len(row) > 2 else None
         tags = (row[3] or "").strip() or None if len(row) > 3 else None
-        vocab = Vocabulary(word=word, translation=translation, example=example, tags=tags)
+        vocab = Vocabulary(
+            user_id=user.id,
+            word=word,
+            translation=translation,
+            example=example,
+            tags=tags,
+        )
         db.add(vocab)
         created += 1
 
@@ -127,22 +137,24 @@ def import_vocabulary_csv(
 
 
 @router.get("/count")
-def vocabulary_count(db: Session = Depends(get_db)):
-    count = db.scalar(select(func.count(Vocabulary.id)))
+def vocabulary_count(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    count = db.scalar(
+        select(func.count(Vocabulary.id)).where(Vocabulary.user_id == user.id)
+    )
     return {"count": count}
 
 
 @router.get("/{vocab_id}", response_model=VocabularyRead)
-def get_vocabulary(vocab_id: int, db: Session = Depends(get_db)):
+def get_vocabulary(vocab_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vocab = db.get(Vocabulary, vocab_id)
-    if not vocab:
+    if not vocab or vocab.user_id != user.id:
         raise HTTPException(404, "Vocabulary entry not found")
     return vocab
 
 
 @router.post("/", response_model=VocabularyRead, status_code=201)
-def create_vocabulary(data: VocabularyCreate, db: Session = Depends(get_db)):
-    vocab = Vocabulary(**data.model_dump())
+def create_vocabulary(data: VocabularyCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    vocab = Vocabulary(user_id=user.id, **data.model_dump())
     db.add(vocab)
     db.commit()
     db.refresh(vocab)
@@ -151,10 +163,13 @@ def create_vocabulary(data: VocabularyCreate, db: Session = Depends(get_db)):
 
 @router.put("/{vocab_id}", response_model=VocabularyRead)
 def update_vocabulary(
-    vocab_id: int, data: VocabularyUpdate, db: Session = Depends(get_db)
+    vocab_id: int,
+    data: VocabularyUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     vocab = db.get(Vocabulary, vocab_id)
-    if not vocab:
+    if not vocab or vocab.user_id != user.id:
         raise HTTPException(404, "Vocabulary entry not found")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(vocab, field, value)
@@ -164,9 +179,9 @@ def update_vocabulary(
 
 
 @router.delete("/{vocab_id}", status_code=204)
-def delete_vocabulary(vocab_id: int, db: Session = Depends(get_db)):
+def delete_vocabulary(vocab_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vocab = db.get(Vocabulary, vocab_id)
-    if not vocab:
+    if not vocab or vocab.user_id != user.id:
         raise HTTPException(404, "Vocabulary entry not found")
     db.delete(vocab)
     db.commit()

@@ -3,7 +3,8 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import GrammarRule
+from app.deps import get_current_user
+from app.models import GrammarRule, User
 from app.schemas import GrammarRuleCreate, GrammarRuleRead, GrammarRuleUpdate
 
 router = APIRouter(prefix="/grammar", tags=["grammar"])
@@ -15,9 +16,10 @@ def list_grammar_rules(
     limit: int = Query(50, ge=1, le=200),
     tag: str | None = None,
     search: str | None = None,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    stmt = select(GrammarRule)
+    stmt = select(GrammarRule).where(GrammarRule.user_id == user.id)
     if tag:
         stmt = stmt.where(GrammarRule.tags.contains(tag))
     if search:
@@ -30,22 +32,24 @@ def list_grammar_rules(
 
 
 @router.get("/count")
-def grammar_count(db: Session = Depends(get_db)):
-    count = db.scalar(select(func.count(GrammarRule.id)))
+def grammar_count(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    count = db.scalar(
+        select(func.count(GrammarRule.id)).where(GrammarRule.user_id == user.id)
+    )
     return {"count": count}
 
 
 @router.get("/{rule_id}", response_model=GrammarRuleRead)
-def get_grammar_rule(rule_id: int, db: Session = Depends(get_db)):
+def get_grammar_rule(rule_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     rule = db.get(GrammarRule, rule_id)
-    if not rule:
+    if not rule or rule.user_id != user.id:
         raise HTTPException(404, "Grammar rule not found")
     return rule
 
 
 @router.post("/", response_model=GrammarRuleRead, status_code=201)
-def create_grammar_rule(data: GrammarRuleCreate, db: Session = Depends(get_db)):
-    rule = GrammarRule(**data.model_dump())
+def create_grammar_rule(data: GrammarRuleCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rule = GrammarRule(user_id=user.id, **data.model_dump())
     db.add(rule)
     db.commit()
     db.refresh(rule)
@@ -54,10 +58,13 @@ def create_grammar_rule(data: GrammarRuleCreate, db: Session = Depends(get_db)):
 
 @router.put("/{rule_id}", response_model=GrammarRuleRead)
 def update_grammar_rule(
-    rule_id: int, data: GrammarRuleUpdate, db: Session = Depends(get_db)
+    rule_id: int,
+    data: GrammarRuleUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     rule = db.get(GrammarRule, rule_id)
-    if not rule:
+    if not rule or rule.user_id != user.id:
         raise HTTPException(404, "Grammar rule not found")
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(rule, field, value)
@@ -67,9 +74,9 @@ def update_grammar_rule(
 
 
 @router.delete("/{rule_id}", status_code=204)
-def delete_grammar_rule(rule_id: int, db: Session = Depends(get_db)):
+def delete_grammar_rule(rule_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     rule = db.get(GrammarRule, rule_id)
-    if not rule:
+    if not rule or rule.user_id != user.id:
         raise HTTPException(404, "Grammar rule not found")
     db.delete(rule)
     db.commit()

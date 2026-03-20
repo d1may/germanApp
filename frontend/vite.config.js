@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
+      '/auth': 'http://localhost:8000',
       '/vocabulary': 'http://localhost:8000',
       '/grammar': 'http://localhost:8000',
       '/flashcards': 'http://localhost:8000',

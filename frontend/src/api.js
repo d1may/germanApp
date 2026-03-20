@@ -1,7 +1,7 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 async function request(url, options = {}) {
-  const res = await fetch(url, options);
+  const res = await fetch(url, { credentials: 'include', ...options });
   if (res.status === 204) return null;
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -9,6 +9,13 @@ async function request(url, options = {}) {
   }
   return res.json();
 }
+
+export const auth = {
+  me: () => request('/auth/me'),
+  register: (data) => request('/auth/register', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  login: (data) => request('/auth/login', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
+};
 
 export const vocab = {
   list: (params = {}) => {
@@ -22,7 +29,7 @@ export const vocab = {
   import: async (file) => {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch('/vocabulary/import', { method: 'POST', body: fd });
+    const res = await fetch('/vocabulary/import', { method: 'POST', credentials: 'include', body: fd });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || res.statusText);

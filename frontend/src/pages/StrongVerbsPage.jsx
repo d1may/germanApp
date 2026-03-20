@@ -2,14 +2,16 @@ import { useState } from 'react'
 import { Search, Star } from 'lucide-react'
 import { STRONG_VERBS, partizipDisplay } from '../data/strongVerbs'
 import { getImportantVerbs, toggleImportant } from '../data/importantVerbs'
+import { useAuth } from '../auth'
 
 export default function StrongVerbsPage() {
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [importantOnly, setImportantOnly] = useState(false)
-  const [important, setImportant] = useState(getImportantVerbs)
+  const [important, setImportant] = useState(() => getImportantVerbs(user?.id))
 
   function handleToggle(infinitive) {
-    setImportant(toggleImportant(infinitive))
+    setImportant(toggleImportant(user?.id, infinitive))
   }
 
   const filtered = STRONG_VERBS.filter((v) => {

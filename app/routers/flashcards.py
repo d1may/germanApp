@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Vocabulary
+from app.deps import get_current_user
+from app.models import User, Vocabulary
 from app.schemas import FlashcardAnswer, FlashcardQuestion, FlashcardResult
 
 router = APIRouter(prefix="/flashcards", tags=["flashcards"])
@@ -22,10 +23,11 @@ def next_flashcard(
     tag: str | None = None,
     direction: str = "de_to_en",
     important_only: bool = False,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get the next flashcard. `direction` is 'de_to_en' or 'en_to_de'."""
-    stmt = select(Vocabulary)
+    stmt = select(Vocabulary).where(Vocabulary.user_id == user.id)
     if tag:
         stmt = stmt.where(Vocabulary.tags.contains(tag))
     if important_only:
@@ -52,11 +54,12 @@ def next_flashcard(
 def answer_flashcard(
     body: FlashcardAnswer,
     direction: str = "de_to_en",
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Submit an answer and get feedback. Weight adjusts based on correctness."""
     vocab = db.get(Vocabulary, body.vocabulary_id)
-    if not vocab:
+    if not vocab or vocab.user_id != user.id:
         raise HTTPException(404, "Vocabulary entry not found")
 
     expected = vocab.translation if direction == "de_to_en" else vocab.word

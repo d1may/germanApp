@@ -3,11 +3,13 @@ import { flashcards } from '../api'
 import { ArrowRight, RotateCcw, Check, X, Star } from 'lucide-react'
 import { STRONG_VERBS, partizipDisplay } from '../data/strongVerbs'
 import { getImportantVerbs } from '../data/importantVerbs'
+import { useAuth } from '../auth'
 
 const CEFR_TAGS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2']
 const COMMON_TAGS = ['animals', 'food', 'verbs', 'nouns', 'adjectives']
 
 export default function FlashcardsPage() {
+  const { user } = useAuth()
   const [mode, setMode] = useState('vocabulary')
   const [tagFilter, setTagFilter] = useState('')
   const [customTag, setCustomTag] = useState('')
@@ -47,7 +49,7 @@ export default function FlashcardsPage() {
   }
 
   function loadNextStrongVerb() {
-    const important = getImportantVerbs()
+    const important = getImportantVerbs(user?.id)
     const pool = verbFilter === 'important' && important.size > 0
       ? STRONG_VERBS.filter((v) => important.has(v.infinitive))
       : STRONG_VERBS

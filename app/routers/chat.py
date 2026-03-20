@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import GrammarRule, Vocabulary
+from app.deps import get_current_user
+from app.models import GrammarRule, User, Vocabulary
 from app.schemas import ChatRequest, ChatResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -47,9 +48,13 @@ ADD_TO_VOCABULARY_TOOL = {
 }
 
 
-def _build_system_prompt(db: Session) -> str:
-    vocab_list = db.scalars(select(Vocabulary)).all()
-    grammar_list = db.scalars(select(GrammarRule)).all()
+def _build_system_prompt(db: Session, *, user_id: int) -> str:
+    vocab_list = db.scalars(
+        select(Vocabulary).where(Vocabulary.user_id == user_id)
+    ).all()
+    grammar_list = db.scalars(
+        select(GrammarRule).where(GrammarRule.user_id == user_id)
+    ).all()
 
     vocab_lines = [
         f"- {v.word} = {v.translation}" + (f"  (e.g. {v.example})" if v.example else "")
@@ -67,26 +72,36 @@ def _build_system_prompt(db: Session) -> str:
     )
 
 
-def _execute_add_to_vocabulary(args: dict, db: Session) -> str:
+def _execute_add_to_vocabulary(args: dict, db: Session, *, user_id: int) -> str:
     word = (args.get("word") or "").strip()
     translation = (args.get("translation") or "").strip()
     if not word or not translation:
         return "Error: word and translation are required."
     example = (args.get("example") or "").strip() or None
     tags = (args.get("tags") or "").strip() or None
-    vocab = Vocabulary(word=word, translation=translation, example=example, tags=tags)
+    vocab = Vocabulary(
+        user_id=user_id,
+        word=word,
+        translation=translation,
+        example=example,
+        tags=tags,
+    )
     db.add(vocab)
     db.commit()
     return f"Added: {word} = {translation}"
 
 
 @router.post("/", response_model=ChatResponse)
-def chat(body: ChatRequest, db: Session = Depends(get_db)):
+def chat(
+    body: ChatRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if not settings.openai_api_key:
         raise HTTPException(500, "OPENAI_API_KEY is not configured")
 
     client = OpenAI(api_key=settings.openai_api_key)
-    system_prompt = _build_system_prompt(db)
+    system_prompt = _build_system_prompt(db, user_id=user.id)
 
     messages = [{"role": "system", "content": system_prompt}]
     for msg in body.history:
@@ -126,7 +141,7 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": "Unknown tool."})
                 continue
             args = json.loads(tc.function.arguments or "{}")
-            result = _execute_add_to_vocabulary(args, db)
+            result = _execute_add_to_vocabulary(args, db, user_id=user.id)
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
     return ChatResponse(reply=reply or "Done.")
