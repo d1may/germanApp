@@ -48,6 +48,10 @@ class VocabularyUpdate(BaseModel):
     important: bool | None = None
 
 
+class BulkDeleteIds(BaseModel):
+    ids: list[int] = Field(..., min_length=1)
+
+
 class VocabularyRead(VocabularyBase):
     id: int
     correct_count: int

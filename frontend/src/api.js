@@ -40,6 +40,7 @@ export const vocab = {
   create: (data) => request('/vocabulary/', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
   update: (id, data) => request(`/vocabulary/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) }),
   delete: (id) => request(`/vocabulary/${id}`, { method: 'DELETE' }),
+  bulkDelete: (ids) => request('/vocabulary/bulk-delete', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ ids }) }),
   count: () => request('/vocabulary/count'),
 };
 
@@ -61,6 +62,8 @@ export const flashcards = {
   },
   answer: (data, direction = 'de_to_en') =>
     request(`/flashcards/answer?direction=${direction}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  markCorrect: (data, direction = 'de_to_en') =>
+    request(`/flashcards/mark-correct?direction=${direction}`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
 };
 
 export const chat = {

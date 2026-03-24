@@ -19,6 +19,8 @@ export default function VocabularyPage() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [formError, setFormError] = useState(null)
   const fileInputRef = useRef(null)
 
   const load = useCallback(async () => {
@@ -39,29 +41,58 @@ export default function VocabularyPage() {
   function openCreate() {
     setEditing(null)
     setForm(EMPTY)
+    setFormError(null)
     setModalOpen(true)
   }
 
   function openEdit(item) {
     setEditing(item)
     setForm({ word: item.word, translation: item.translation, example: item.example || '', tags: item.tags || '' })
+    setFormError(null)
     setModalOpen(true)
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
+    setFormError(null)
     const data = { ...form, example: form.example || null, tags: form.tags || null }
-    if (editing) {
-      await vocab.update(editing.id, data)
-    } else {
-      await vocab.create(data)
+    try {
+      if (editing) {
+        await vocab.update(editing.id, data)
+      } else {
+        await vocab.create(data)
+      }
+      setModalOpen(false)
+      load()
+    } catch (err) {
+      setFormError(err.message || 'Error')
     }
-    setModalOpen(false)
-    load()
   }
 
   async function handleDelete(id) {
     await vocab.delete(id)
+    setSelectedIds((s) => { const n = new Set(s); n.delete(id); return n })
+    load()
+  }
+
+  function toggleSelect(id) {
+    setSelectedIds((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === items.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(items.map((v) => v.id)))
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return
+    await vocab.bulkDelete([...selectedIds])
+    setSelectedIds(new Set())
     load()
   }
 
@@ -195,8 +226,16 @@ export default function VocabularyPage() {
             ))}
           </div>
         </div>
+        {selectedIds.size > 0 && (
+          <button
+            onClick={handleBulkDelete}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+          >
+            <Trash2 size={14} /> Delete selected ({selectedIds.size})
+          </button>
+        )}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Date:</span>
+          <span className="text-xs text-gray-500">Sort:</span>
           <select
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
@@ -204,6 +243,7 @@ export default function VocabularyPage() {
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
+            <option value="alphabet">Alphabet</option>
           </select>
         </div>
       </div>
@@ -217,8 +257,16 @@ export default function VocabularyPage() {
           {/* Mobile: card layout */}
           <div className="md:hidden flex flex-col gap-3">
             {items.map((v) => (
-              <div key={v.id} className="rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+              <div key={v.id} className={`rounded-xl border p-4 transition-colors ${selectedIds.has(v.id) ? 'border-amber-500 bg-amber-500/10' : 'border-gray-800 bg-gray-900/50'}`}>
                 <div className="flex items-start justify-between gap-3">
+                  <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(v.id)}
+                      onChange={() => toggleSelect(v.id)}
+                      className="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/40"
+                    />
+                  </label>
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-amber-300 truncate">{v.word}</p>
                     <p className="text-gray-300 text-sm mt-0.5">{v.translation}</p>
@@ -250,6 +298,16 @@ export default function VocabularyPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-900 text-gray-400 text-left">
+                  <th className="px-4 py-3 w-10">
+                    <label className="cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={items.length > 0 && selectedIds.size === items.length}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/40"
+                      />
+                    </label>
+                  </th>
                   <th className="px-4 py-3 font-medium">Word</th>
                   <th className="px-4 py-3 font-medium">Translation</th>
                   <th className="px-4 py-3 font-medium">Example</th>
@@ -260,7 +318,17 @@ export default function VocabularyPage() {
               </thead>
               <tbody>
                 {items.map((v) => (
-                  <tr key={v.id} className="border-t border-gray-800/60 hover:bg-gray-900/50 transition-colors">
+                  <tr key={v.id} className={`border-t border-gray-800/60 hover:bg-gray-900/50 transition-colors ${selectedIds.has(v.id) ? 'bg-amber-500/10' : ''}`}>
+                    <td className="px-4 py-3">
+                      <label className="cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(v.id)}
+                          onChange={() => toggleSelect(v.id)}
+                          className="rounded border-gray-600 bg-gray-800 text-amber-500 focus:ring-amber-500/40"
+                        />
+                      </label>
+                    </td>
                     <td className="px-4 py-3 font-medium text-amber-300">{v.word}</td>
                     <td className="px-4 py-3 text-gray-300">{v.translation}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{v.example}</td>
@@ -297,6 +365,7 @@ export default function VocabularyPage() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Edit Word' : 'Add Word'}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {formError && <p className="text-sm text-red-400">{formError}</p>}
           {field('German Word', 'word', { required: true, placeholder: 'der Hund' })}
           {field('Translation', 'translation', { required: true, placeholder: 'the dog' })}
           {field('Example Sentence', 'example', { textarea: true, placeholder: 'Der Hund ist groß.' })}

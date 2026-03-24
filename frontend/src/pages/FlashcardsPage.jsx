@@ -87,6 +87,21 @@ export default function FlashcardsPage() {
     }
   }
 
+  async function handleSetAsCorrect() {
+    if (!result || result.is_correct || card?.type === 'strong_verb') return
+    setLoading(true)
+    try {
+      const res = await flashcards.markCorrect(
+        { vocabulary_id: card.vocabulary_id, answer: result.your_answer },
+        direction
+      )
+      setResult(res)
+      setStats((s) => ({ correct: s.correct + 1, wrong: Math.max(0, s.wrong - 1) }))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function submitStrongVerbAnswer(e) {
     e.preventDefault()
     if (!card || !answer.trim() || card.type !== 'strong_verb') return
@@ -338,7 +353,16 @@ export default function FlashcardsPage() {
               <span className={result.is_correct ? 'text-green-400' : 'text-red-400'}>{result.your_answer}</span>
             </div>
           </div>
-          <div className="px-4 pb-4 md:px-6 md:pb-5">
+          <div className="px-4 pb-4 md:px-6 md:pb-5 flex flex-col gap-2">
+            {!result.is_correct && mode === 'vocabulary' && (
+              <button
+                onClick={handleSetAsCorrect}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 bg-green-600/80 hover:bg-green-600 text-white font-medium py-2.5 rounded-lg transition-colors text-sm touch-manipulation min-h-[44px]"
+              >
+                <Check size={14} /> Set as correct
+              </button>
+            )}
             <button
               onClick={loadNext}
               className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold py-3 rounded-lg transition-colors text-sm touch-manipulation min-h-[48px]"

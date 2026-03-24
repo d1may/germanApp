@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import get_current_user
 from app.models import User, Vocabulary
-from app.schemas import VocabularyCreate, VocabularyRead, VocabularyUpdate
+from app.schemas import BulkDeleteIds, VocabularyCreate, VocabularyRead, VocabularyUpdate
 
 router = APIRouter(prefix="/vocabulary", tags=["vocabulary"])
 
@@ -20,7 +20,7 @@ def list_vocabulary(
     limit: int = Query(50, ge=1, le=200),
     tag: str | None = None,
     search: str | None = None,
-    sort: str = Query("newest", description="newest or oldest by created_at"),
+    sort: str = Query("newest", description="newest, oldest, or alphabet"),
     important_only: bool = False,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -35,7 +35,15 @@ def list_vocabulary(
         stmt = stmt.where(
             Vocabulary.word.ilike(pattern) | Vocabulary.translation.ilike(pattern)
         )
-    order = Vocabulary.created_at.asc() if sort == "oldest" else Vocabulary.created_at.desc()
+    if sort == "alphabet":
+        sort_key = func.lower(Vocabulary.word)
+        for old, new in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")]:
+            sort_key = func.replace(sort_key, old, new)
+        order = sort_key.asc()
+    elif sort == "oldest":
+        order = Vocabulary.created_at.asc()
+    else:
+        order = Vocabulary.created_at.desc()
     stmt = stmt.order_by(order).offset(skip).limit(limit)
     return db.scalars(stmt).all()
 
@@ -44,7 +52,7 @@ def list_vocabulary(
 def export_vocabulary_csv(
     tag: str | None = None,
     search: str | None = None,
-    sort: str = Query("newest", description="newest or oldest by created_at"),
+    sort: str = Query("newest", description="newest, oldest, or alphabet"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -57,7 +65,15 @@ def export_vocabulary_csv(
         stmt = stmt.where(
             Vocabulary.word.ilike(pattern) | Vocabulary.translation.ilike(pattern)
         )
-    order = Vocabulary.created_at.asc() if sort == "oldest" else Vocabulary.created_at.desc()
+    if sort == "alphabet":
+        sort_key = func.lower(Vocabulary.word)
+        for old, new in [("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")]:
+            sort_key = func.replace(sort_key, old, new)
+        order = sort_key.asc()
+    elif sort == "oldest":
+        order = Vocabulary.created_at.asc()
+    else:
+        order = Vocabulary.created_at.desc()
     items = db.scalars(stmt.order_by(order)).all()
 
     buf = io.StringIO()
@@ -111,6 +127,7 @@ def import_vocabulary_csv(
     )
     start = 1 if has_header else 0
 
+    seen_in_file = set()
     for i, row in enumerate(lines[start:], start=start + 1):
         if len(row) < 2:
             if any(c.strip() for c in row):
@@ -119,6 +136,19 @@ def import_vocabulary_csv(
         word = (row[0] or "").strip()
         translation = (row[1] or "").strip()
         if not word or not translation:
+            continue
+        key = _normalize_key(word, translation)
+        if key in seen_in_file:
+            continue
+        seen_in_file.add(key)
+        existing = db.scalars(
+            select(Vocabulary.id).where(
+                Vocabulary.user_id == user.id,
+                func.lower(func.trim(Vocabulary.word)) == key[0],
+                func.lower(func.trim(Vocabulary.translation)) == key[1],
+            )
+        ).first()
+        if existing:
             continue
         example = (row[2] or "").strip() or None if len(row) > 2 else None
         tags = (row[3] or "").strip() or None if len(row) > 3 else None
@@ -144,6 +174,23 @@ def vocabulary_count(user: User = Depends(get_current_user), db: Session = Depen
     return {"count": count}
 
 
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete_vocabulary(
+    body: BulkDeleteIds,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete multiple vocabulary entries by IDs. Only user's own entries are deleted."""
+    deleted = 0
+    for vid in body.ids:
+        vocab = db.get(Vocabulary, vid)
+        if vocab and vocab.user_id == user.id:
+            db.delete(vocab)
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted}
+
+
 @router.get("/{vocab_id}", response_model=VocabularyRead)
 def get_vocabulary(vocab_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     vocab = db.get(Vocabulary, vocab_id)
@@ -152,8 +199,22 @@ def get_vocabulary(vocab_id: int, user: User = Depends(get_current_user), db: Se
     return vocab
 
 
+def _normalize_key(word: str, translation: str) -> tuple[str, str]:
+    return (word.strip().lower(), (translation or "").strip().lower())
+
+
 @router.post("/", response_model=VocabularyRead, status_code=201)
 def create_vocabulary(data: VocabularyCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    key = _normalize_key(data.word, data.translation)
+    existing = db.scalars(
+        select(Vocabulary).where(
+            Vocabulary.user_id == user.id,
+            func.lower(func.trim(Vocabulary.word)) == key[0],
+            func.lower(func.trim(Vocabulary.translation)) == key[1],
+        )
+    ).first()
+    if existing:
+        raise HTTPException(400, "This word with this translation already exists")
     vocab = Vocabulary(user_id=user.id, **data.model_dump())
     db.add(vocab)
     db.commit()
@@ -171,7 +232,21 @@ def update_vocabulary(
     vocab = db.get(Vocabulary, vocab_id)
     if not vocab or vocab.user_id != user.id:
         raise HTTPException(404, "Vocabulary entry not found")
-    for field, value in data.model_dump(exclude_unset=True).items():
+    dump = data.model_dump(exclude_unset=True)
+    word = dump.get("word", vocab.word)
+    translation = dump.get("translation", vocab.translation)
+    key = _normalize_key(word, translation)
+    existing = db.scalars(
+        select(Vocabulary).where(
+            Vocabulary.user_id == user.id,
+            Vocabulary.id != vocab_id,
+            func.lower(func.trim(Vocabulary.word)) == key[0],
+            func.lower(func.trim(Vocabulary.translation)) == key[1],
+        )
+    ).first()
+    if existing:
+        raise HTTPException(400, "This word with this translation already exists")
+    for field, value in dump.items():
         setattr(vocab, field, value)
     db.commit()
     db.refresh(vocab)

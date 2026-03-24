@@ -84,3 +84,32 @@ def answer_flashcard(
         correct_count=vocab.correct_count,
         wrong_count=vocab.wrong_count,
     )
+
+
+@router.post("/mark-correct", response_model=FlashcardResult)
+def mark_flashcard_correct(
+    body: FlashcardAnswer,
+    direction: str = "de_to_en",
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Mark a wrong answer as correct (e.g. typo). Reverses the weight/stats as if user answered correctly."""
+    vocab = db.get(Vocabulary, body.vocabulary_id)
+    if not vocab or vocab.user_id != user.id:
+        raise HTTPException(404, "Vocabulary entry not found")
+    # Reverse wrong: treat as if they answered correctly
+    vocab.wrong_count = max(0, vocab.wrong_count - 1)
+    vocab.correct_count += 1
+    vocab.weight = max(0.1, vocab.weight * 0.8)
+    db.commit()
+    db.refresh(vocab)
+    expected = vocab.translation if direction == "de_to_en" else vocab.word
+    return FlashcardResult(
+        vocabulary_id=vocab.id,
+        word=vocab.word,
+        correct_answer=expected,
+        your_answer=body.answer,
+        is_correct=True,
+        correct_count=vocab.correct_count,
+        wrong_count=vocab.wrong_count,
+    )
