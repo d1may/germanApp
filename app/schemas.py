@@ -37,7 +37,7 @@ class VocabularyBase(BaseModel):
 
 
 class VocabularyCreate(VocabularyBase):
-    pass
+    deck_id: int | None = None
 
 
 class VocabularyUpdate(BaseModel):
@@ -46,6 +46,7 @@ class VocabularyUpdate(BaseModel):
     example: str | None = None
     tags: str | None = Field(None, max_length=500)
     important: bool | None = None
+    deck_id: int | None = None
 
 
 class BulkDeleteIds(BaseModel):
@@ -58,6 +59,27 @@ class VocabularyRead(VocabularyBase):
     wrong_count: int
     weight: float
     important: bool
+    deck_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VocabularyDeckBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+
+
+class VocabularyDeckCreate(VocabularyDeckBase):
+    pass
+
+
+class VocabularyDeckUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+
+
+class VocabularyDeckRead(VocabularyDeckBase):
+    id: int
     created_at: datetime
     updated_at: datetime
 
@@ -127,6 +149,10 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: list[ChatMessage] = Field(default_factory=list)
+    deck_id: int | None = Field(
+        None,
+        description="Target deck for words added via add_to_vocabulary from this chat; omit or null for without deck.",
+    )
 
 
 class ChatResponse(BaseModel):

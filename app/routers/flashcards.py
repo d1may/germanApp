@@ -23,6 +23,9 @@ def next_flashcard(
     tag: str | None = None,
     direction: str = "de_to_en",
     important_only: bool = False,
+    deck_id: int | None = None,
+    without_deck: bool = False,
+    exclude_ids: str | None = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -32,6 +35,18 @@ def next_flashcard(
         stmt = stmt.where(Vocabulary.tags.contains(tag))
     if important_only:
         stmt = stmt.where(Vocabulary.important == True)
+    if without_deck:
+        stmt = stmt.where(Vocabulary.deck_id.is_(None))
+    elif deck_id is not None:
+        stmt = stmt.where(Vocabulary.deck_id == deck_id)
+    excluded: list[int] = []
+    if exclude_ids:
+        try:
+            excluded = [int(x) for x in exclude_ids.split(",") if x.strip()]
+        except ValueError:
+            raise HTTPException(400, "exclude_ids must contain only integers")
+    if excluded:
+        stmt = stmt.where(Vocabulary.id.notin_(excluded))
     all_vocab = db.scalars(stmt).all()
     if not all_vocab:
         raise HTTPException(404, "No vocabulary words found")

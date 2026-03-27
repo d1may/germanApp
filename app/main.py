@@ -37,6 +37,14 @@ def _migrate_add_user_id_columns():
             conn.commit()
 
 
+def _migrate_add_vocabulary_deck_id():
+    with engine.connect() as conn:
+        vocab_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(vocabulary)"))]
+        if "deck_id" not in vocab_cols:
+            conn.execute(text("ALTER TABLE vocabulary ADD COLUMN deck_id INTEGER"))
+            conn.commit()
+
+
 def _ensure_default_admin_user():
     with engine.connect() as conn:
         users_table = conn.execute(
@@ -83,6 +91,7 @@ async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _migrate_add_important()
     _migrate_add_user_id_columns()
+    _migrate_add_vocabulary_deck_id()
     _ensure_default_admin_user()
     _backfill_user_ids_to_default_admin()
     yield

@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import GrammarRule, User, Vocabulary
+from app.models import GrammarRule, User, Vocabulary, VocabularyDeck
+from app.routers.vocabulary import _normalize_key, _vocabulary_duplicate_exists
 from app.schemas import ChatRequest, ChatResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -18,8 +19,11 @@ You are a helpful German language tutor. Use the student's vocabulary and gramma
 knowledge below to personalize your responses. Prefer using words and grammar they \
 are currently learning. Correct mistakes gently and explain in English.
 
-When the user asks to add a word, use add_to_vocabulary. If the word already exists, \
-the tool will tell you—inform the user and show the existing entry (e.g. "You already have: sein = to be"). \
+{chat_deck_section}
+
+When the user asks to add a word, use add_to_vocabulary. The deck is chosen by the user in the chat UI \
+(not in the tool)—do not ask which deck. If the word already exists in that target, \
+the tool will tell you—inform the user and show the existing entry. \
 When the user has a word with wrong translation and asks to fix it, use update_vocabulary.
 
 For grammar: when the user asks to add or save a grammar rule, use add_grammar_rule. If a rule with that \
@@ -36,7 +40,7 @@ ADD_TO_VOCABULARY_TOOL = {
     "type": "function",
     "function": {
         "name": "add_to_vocabulary",
-        "description": "Add a new German word with its translation to the student's vocabulary. Use when the user asks to add, save, or remember a word. If the word already exists, you will be told—inform the user and show the existing entry.",
+        "description": "Add a new German word with its translation. The deck (or without deck) is set by the user's chat selector—not passed here. Use when the user asks to add, save, or remember a word.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -103,7 +107,34 @@ UPDATE_GRAMMAR_RULE_TOOL = {
 }
 
 
-def _build_system_prompt(db: Session, *, user_id: int) -> str:
+def _resolve_chat_deck_id(db: Session, user_id: int, deck_id: int | None) -> int | None:
+    if deck_id is None:
+        return None
+    deck = db.get(VocabularyDeck, deck_id)
+    if not deck or deck.user_id != user_id:
+        return None
+    return deck_id
+
+
+def _chat_deck_hint(db: Session, *, user_id: int, chat_deck_id: int | None) -> str:
+    if chat_deck_id is None:
+        return (
+            "CHAT SAVE TARGET: New words from add_to_vocabulary are saved **without a deck** "
+            "(the user selected “Without deck” in the chat UI)."
+        )
+    deck = db.get(VocabularyDeck, chat_deck_id)
+    if deck and deck.user_id == user_id:
+        return (
+            f"CHAT SAVE TARGET: New words from add_to_vocabulary are saved into deck **{deck.name}** "
+            f"(user's chat UI selection)."
+        )
+    return (
+        "CHAT SAVE TARGET: Invalid deck was ignored—new words would be saved without a deck."
+    )
+
+
+def _build_system_prompt(db: Session, *, user_id: int, chat_deck_id: int | None = None) -> str:
+    chat_deck_section = _chat_deck_hint(db, user_id=user_id, chat_deck_id=chat_deck_id)
     vocab_list = db.scalars(
         select(Vocabulary).where(Vocabulary.user_id == user_id)
     ).all()
@@ -120,6 +151,7 @@ def _build_system_prompt(db: Session, *, user_id: int) -> str:
     ]
 
     return SYSTEM_PROMPT_TEMPLATE.format(
+        chat_deck_section=chat_deck_section,
         vocab_count=len(vocab_list),
         vocab_block="\n".join(vocab_lines) or "(none yet)",
         grammar_count=len(grammar_list),
@@ -127,26 +159,26 @@ def _build_system_prompt(db: Session, *, user_id: int) -> str:
     )
 
 
-def _execute_add_to_vocabulary(args: dict, db: Session, *, user_id: int) -> str:
+def _execute_add_to_vocabulary(
+    args: dict, db: Session, *, user_id: int, deck_id: int | None = None
+) -> str:
     word = (args.get("word") or "").strip()
     translation = (args.get("translation") or "").strip()
     if not word or not translation:
         return "Error: word and translation are required."
-    # Check if word already exists (case-insensitive)
-    existing = db.scalars(
-        select(Vocabulary).where(
-            Vocabulary.user_id == user_id,
-            func.lower(func.trim(Vocabulary.word)) == word.strip().lower(),
-        )
-    ).first()
-    if existing:
-        return f"Already exists: {existing.word} = {existing.translation}" + (
-            f" (e.g. {existing.example})" if existing.example else ""
-        )
+    if deck_id is not None:
+        deck = db.get(VocabularyDeck, deck_id)
+        if not deck or deck.user_id != user_id:
+            return "Error: invalid deck for this user."
+    key = _normalize_key(word, translation)
+    if _vocabulary_duplicate_exists(db, user_id, key, deck_id):
+        where = "in this deck" if deck_id is not None else "without a deck"
+        return f"Already exists {where}: {word} = {translation}"
     example = (args.get("example") or "").strip() or None
     tags = (args.get("tags") or "").strip() or None
     vocab = Vocabulary(
         user_id=user_id,
+        deck_id=deck_id,
         word=word,
         translation=translation,
         example=example,
@@ -154,7 +186,12 @@ def _execute_add_to_vocabulary(args: dict, db: Session, *, user_id: int) -> str:
     )
     db.add(vocab)
     db.commit()
-    return f"Added: {word} = {translation}"
+    if deck_id is not None:
+        dname = db.get(VocabularyDeck, deck_id)
+        label = f' in deck "{dname.name}"' if dname else ""
+    else:
+        label = " (without deck)"
+    return f"Added{label}: {word} = {translation}"
 
 
 def _execute_update_vocabulary(args: dict, db: Session, *, user_id: int) -> str:
@@ -231,7 +268,8 @@ def chat(
         raise HTTPException(500, "OPENAI_API_KEY is not configured")
 
     client = OpenAI(api_key=settings.openai_api_key)
-    system_prompt = _build_system_prompt(db, user_id=user.id)
+    chat_deck_id = _resolve_chat_deck_id(db, user.id, body.deck_id)
+    system_prompt = _build_system_prompt(db, user_id=user.id, chat_deck_id=chat_deck_id)
 
     messages = [{"role": "system", "content": system_prompt}]
     for msg in body.history:
@@ -274,7 +312,9 @@ def chat(
         for tc in msg.tool_calls:
             args = json.loads(tc.function.arguments or "{}")
             if tc.function.name == "add_to_vocabulary":
-                result = _execute_add_to_vocabulary(args, db, user_id=user.id)
+                result = _execute_add_to_vocabulary(
+                    args, db, user_id=user.id, deck_id=chat_deck_id
+                )
             elif tc.function.name == "update_vocabulary":
                 result = _execute_update_vocabulary(args, db, user_id=user.id)
             elif tc.function.name == "add_grammar_rule":

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { flashcards } from '../api'
+import { useEffect, useRef, useState } from 'react'
+import { flashcards, vocab } from '../api'
 import { ArrowRight, RotateCcw, Check, X, Star } from 'lucide-react'
 import { STRONG_VERBS, partizipDisplay } from '../data/strongVerbs'
 import { getImportantVerbs } from '../data/importantVerbs'
@@ -14,6 +14,8 @@ export default function FlashcardsPage() {
   const [tagFilter, setTagFilter] = useState('')
   const [customTag, setCustomTag] = useState('')
   const [vocabImportantOnly, setVocabImportantOnly] = useState(false)
+  const [deckFilter, setDeckFilter] = useState('')
+  const [vocabCardMode, setVocabCardMode] = useState('weighted_random') // weighted_random | random_no_repeat
   const [direction, setDirection] = useState('de_to_en')
   const [card, setCard] = useState(null)
   const [answer, setAnswer] = useState('')
@@ -23,13 +25,28 @@ export default function FlashcardsPage() {
   const [stats, setStats] = useState({ correct: 0, wrong: 0 })
   const [verbQuestionType, setVerbQuestionType] = useState('partizip')
   const [verbFilter, setVerbFilter] = useState('all') // all | important
+  const [decks, setDecks] = useState([])
+  const [usedVocabularyIds, setUsedVocabularyIds] = useState(new Set())
 
   const effectiveTag = customTag.trim() || tagFilter
+
+  useEffect(() => {
+    let active = true
+    vocab.listDecks()
+      .then((data) => { if (active) setDecks(data) })
+      .catch(() => {})
+    return () => { active = false }
+  }, [])
 
   function resetCard() {
     setCard(null)
     setResult(null)
     setAnswer('')
+  }
+
+  function resetVocabularySession() {
+    resetCard()
+    setUsedVocabularyIds(new Set())
   }
 
   async function loadNextVocabulary() {
@@ -39,9 +56,26 @@ export default function FlashcardsPage() {
       const params = { direction }
       if (effectiveTag) params.tag = effectiveTag
       if (vocabImportantOnly) params.important_only = 'true'
-      setCard(await flashcards.next(params))
+      if (deckFilter === 'none') params.without_deck = 'true'
+      else if (deckFilter) params.deck_id = deckFilter
+      if (vocabCardMode === 'random_no_repeat' && usedVocabularyIds.size > 0) {
+        params.exclude_ids = [...usedVocabularyIds].join(',')
+      }
+      const nextCard = await flashcards.next(params)
+      setCard(nextCard)
+      if (vocabCardMode === 'random_no_repeat') {
+        setUsedVocabularyIds((prev) => {
+          const n = new Set(prev)
+          n.add(nextCard.vocabulary_id)
+          return n
+        })
+      }
     } catch (e) {
-      setError(e.message)
+      if (vocabCardMode === 'random_no_repeat' && e.message === 'No vocabulary words found') {
+        setError('No more new words in this selection. Reset filters or switch mode to continue.')
+      } else {
+        setError(e.message)
+      }
       setCard(null)
     } finally {
       setLoading(false)
@@ -70,6 +104,21 @@ export default function FlashcardsPage() {
     if (mode === 'strong_verbs') loadNextStrongVerb()
     else loadNextVocabulary()
   }
+
+  const loadNextRef = useRef(loadNext)
+  loadNextRef.current = loadNext
+
+  useEffect(() => {
+    if (!result || loading) return
+    function onKeyDown(e) {
+      if (e.key !== 'Enter' || e.repeat) return
+      if (e.target instanceof HTMLButtonElement) return
+      e.preventDefault()
+      loadNextRef.current()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [result, loading])
 
   async function submitVocabularyAnswer(e) {
     e.preventDefault()
@@ -156,7 +205,7 @@ export default function FlashcardsPage() {
               {[['all', 'All'], ['important', 'Important only']].map(([val, label]) => (
                 <button
                   key={val}
-                  onClick={() => { setVocabImportantOnly(val === 'important'); resetCard() }}
+                  onClick={() => { setVocabImportantOnly(val === 'important'); resetVocabularySession() }}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
                     (val === 'important' && vocabImportantOnly) || (val === 'all' && !vocabImportantOnly)
                       ? 'bg-amber-500 text-gray-950'
@@ -170,10 +219,61 @@ export default function FlashcardsPage() {
             </div>
           </div>
           <div>
+            <p className="text-xs text-gray-500 mb-2">Card mode</p>
+            <div className="flex gap-1">
+              {[
+                ['weighted_random', 'Random'],
+                ['random_no_repeat', 'No repeats'],
+              ].map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => { setVocabCardMode(val); resetVocabularySession() }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    vocabCardMode === val ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-2">Deck</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => { setDeckFilter(''); resetVocabularySession() }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  !deckFilter ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => { setDeckFilter('none'); resetVocabularySession() }}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  deckFilter === 'none' ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                Without deck
+              </button>
+              {decks.map((deck) => (
+                <button
+                  key={deck.id}
+                  onClick={() => { setDeckFilter(deckFilter === String(deck.id) ? '' : String(deck.id)); resetVocabularySession() }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    deckFilter === String(deck.id) ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {deck.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
             <p className="text-xs text-gray-500 mb-2">Filter by tag</p>
             <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => { setTagFilter(''); setCustomTag(''); resetCard() }}
+              onClick={() => { setTagFilter(''); setCustomTag(''); resetVocabularySession() }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 !effectiveTag ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
               }`}
@@ -183,7 +283,7 @@ export default function FlashcardsPage() {
             {CEFR_TAGS.map((t) => (
               <button
                 key={t}
-                onClick={() => { setTagFilter(t); setCustomTag(''); resetCard() }}
+                onClick={() => { setTagFilter(t); setCustomTag(''); resetVocabularySession() }}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   tagFilter === t ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
                 }`}
@@ -194,7 +294,7 @@ export default function FlashcardsPage() {
             {COMMON_TAGS.map((t) => (
               <button
                 key={t}
-                onClick={() => { setTagFilter(t); setCustomTag(''); resetCard() }}
+                onClick={() => { setTagFilter(t); setCustomTag(''); resetVocabularySession() }}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   tagFilter === t ? 'bg-amber-500 text-gray-950' : 'bg-gray-800 text-gray-400 hover:text-gray-200'
                 }`}
@@ -206,7 +306,7 @@ export default function FlashcardsPage() {
               type="text"
               placeholder="Custom tag..."
               value={customTag}
-              onChange={(e) => { setCustomTag(e.target.value); setTagFilter(''); resetCard() }}
+              onChange={(e) => { setCustomTag(e.target.value); setTagFilter(''); resetVocabularySession() }}
               className="w-28 px-2 py-1.5 rounded-md text-xs bg-gray-800 border border-gray-700 text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
             />
             </div>
@@ -258,7 +358,7 @@ export default function FlashcardsPage() {
           {[['de_to_en', 'DE → EN'], ['en_to_de', 'EN → DE']].map(([val, label]) => (
             <button
               key={val}
-              onClick={() => { setDirection(val); resetCard() }}
+              onClick={() => { setDirection(val); resetVocabularySession() }}
               className={`px-4 py-2.5 rounded-md text-sm font-medium transition-colors touch-manipulation min-h-[44px] ${
                 direction === val ? 'bg-amber-500 text-gray-950' : 'text-gray-400 hover:text-gray-200'
               }`}

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Loader2, Trash2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { chat } from '../api'
+import { chat, vocab } from '../api'
 import { useAuth } from '../auth'
 
 function loadStoredMessages(storageKey) {
@@ -15,6 +15,10 @@ function loadStoredMessages(storageKey) {
   }
 }
 
+function chatDeckStorageKey(userId) {
+  return userId ? `germanApp_chat_deck_u${userId}` : 'germanApp_chat_deck_anon'
+}
+
 export default function ChatPage() {
   const { user } = useAuth()
   const storageKey = user ? `germanApp_chat_messages_u${user.id}` : 'germanApp_chat_messages_anon'
@@ -22,6 +26,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState(() => loadStoredMessages(storageKey))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [decks, setDecks] = useState([])
+  const [chatDeckId, setChatDeckId] = useState('')
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -29,6 +35,28 @@ export default function ChatPage() {
     setMessages(loadStoredMessages(storageKey))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageKey])
+
+  useEffect(() => {
+    let active = true
+    vocab
+      .listDecks()
+      .then((data) => {
+        if (active) setDecks(data)
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(chatDeckStorageKey(user?.id))
+      if (raw !== null) setChatDeckId(raw)
+    } catch {
+      /* ignore */
+    }
+  }, [user?.id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -55,7 +83,11 @@ export default function ChatPage() {
     setLoading(true)
 
     try {
-      const res = await chat.send({ message: text, history })
+      const res = await chat.send({
+        message: text,
+        history,
+        deck_id: chatDeckId ? Number(chatDeckId) : null,
+      })
       setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }])
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${err.message}` }])
@@ -123,23 +155,48 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={handleSend} className="p-4 border-t border-gray-800 flex gap-2 shrink-0 safe-area-bottom">
-        <input
-          ref={inputRef}
-          autoFocus
-          className="flex-1 min-w-0 rounded-lg bg-gray-900 border border-gray-800 px-4 py-3 text-base text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-          placeholder="Ask your tutor anything..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-        />
-        <button
-          type="submit"
-          disabled={loading || !input.trim()}
-          className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 px-4 rounded-lg transition-colors touch-manipulation min-h-[44px] shrink-0"
-        >
-          <Send size={16} />
-        </button>
-      </form>
+      <div className="p-4 border-t border-gray-800 shrink-0 safe-area-bottom space-y-3">
+        <label className="flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-gray-500">
+          <span className="shrink-0">Save new words to</span>
+          <select
+            value={chatDeckId}
+            onChange={(e) => {
+              const v = e.target.value
+              setChatDeckId(v)
+              try {
+                localStorage.setItem(chatDeckStorageKey(user?.id), v)
+              } catch {
+                /* ignore */
+              }
+            }}
+            className="w-full sm:w-auto sm:min-w-[12rem] rounded-lg bg-gray-900 border border-gray-800 px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+          >
+            <option value="">Without deck</option>
+            {decks.map((d) => (
+              <option key={d.id} value={String(d.id)}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <form onSubmit={handleSend} className="flex gap-2">
+          <input
+            ref={inputRef}
+            autoFocus
+            className="flex-1 min-w-0 rounded-lg bg-gray-900 border border-gray-800 px-4 py-3 text-base text-gray-100 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+            placeholder="Ask your tutor anything..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-gray-950 px-4 rounded-lg transition-colors touch-manipulation min-h-[44px] shrink-0"
+          >
+            <Send size={16} />
+          </button>
+        </form>
+      </div>
     </div>
   )
 }

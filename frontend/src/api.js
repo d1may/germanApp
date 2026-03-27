@@ -26,20 +26,30 @@ export const vocab = {
     const q = new URLSearchParams(params).toString();
     return `/vocabulary/export${q ? '?' + q : ''}`;
   },
-  import: async (file) => {
+  import: async (file, params = {}) => {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === '') return;
+      q.set(k, typeof v === 'boolean' ? (v ? 'true' : 'false') : String(v));
+    });
+    const qs = q.toString();
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch('/vocabulary/import', { method: 'POST', credentials: 'include', body: fd });
+    const res = await fetch(`/vocabulary/import${qs ? `?${qs}` : ''}`, { method: 'POST', credentials: 'include', body: fd });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || res.statusText);
     }
     return res.json();
   },
-  get: (id) => request(`/vocabulary/${id}`),
+  listDecks: () => request('/vocabulary/decks'),
+  createDeck: (data) => request('/vocabulary/decks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  updateDeck: (id, data) => request(`/vocabulary/decks/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  deleteDeck: (id) => request(`/vocabulary/decks/${id}`, { method: 'DELETE' }),
+  get: (id) => request(`/vocabulary/item/${id}`),
   create: (data) => request('/vocabulary/', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(data) }),
-  update: (id, data) => request(`/vocabulary/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) }),
-  delete: (id) => request(`/vocabulary/${id}`, { method: 'DELETE' }),
+  update: (id, data) => request(`/vocabulary/item/${id}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(data) }),
+  delete: (id) => request(`/vocabulary/item/${id}`, { method: 'DELETE' }),
   bulkDelete: (ids) => request('/vocabulary/bulk-delete', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ ids }) }),
   count: () => request('/vocabulary/count'),
 };
