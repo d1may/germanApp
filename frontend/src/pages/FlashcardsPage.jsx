@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { flashcards, vocab } from '../api'
-import { ArrowRight, RotateCcw, Check, X, Star } from 'lucide-react'
+import { ArrowRight, RotateCcw, Check, X, Star, Lightbulb } from 'lucide-react'
 import { STRONG_VERBS, partizipDisplay } from '../data/strongVerbs'
 import { getImportantVerbs } from '../data/importantVerbs'
 import { useAuth } from '../auth'
@@ -27,6 +27,7 @@ export default function FlashcardsPage() {
   const [verbFilter, setVerbFilter] = useState('all') // all | important
   const [decks, setDecks] = useState([])
   const [usedVocabularyIds, setUsedVocabularyIds] = useState(new Set())
+  const [showExampleHint, setShowExampleHint] = useState(false)
 
   const effectiveTag = customTag.trim() || tagFilter
 
@@ -37,6 +38,10 @@ export default function FlashcardsPage() {
       .catch(() => {})
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    setShowExampleHint(false)
+  }, [card])
 
   function resetCard() {
     setCard(null)
@@ -399,20 +404,51 @@ export default function FlashcardsPage() {
 
       {card && !result && (
         <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
-          <div className="px-4 py-5 md:px-6 md:py-8 text-center">
-            {card.type === 'strong_verb' ? (
-              <>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">
-                  {verbQuestionType === 'partizip' ? 'Partizip II (Perfekt)' : 'Präteritum'}
-                </p>
-                <p className="text-xl md:text-2xl font-bold text-amber-300">{card.infinitive}</p>
-              </>
-            ) : (
-              <>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">{direction === 'de_to_en' ? 'Translate to English' : 'Translate to German'}</p>
-                <p className="text-xl md:text-2xl font-bold text-amber-300">{(card.prompt && card.prompt.includes(': ')) ? card.prompt.split(': ')[1] : (direction === 'de_to_en' ? card.word : card.translation)}</p>
-              </>
+          <div className="relative">
+            {card.type !== 'strong_verb' && (
+              <div className="absolute right-2 top-2 md:right-3 md:top-3 z-10">
+                <button
+                  type="button"
+                  onClick={() => card.example && setShowExampleHint((v) => !v)}
+                  disabled={!card.example}
+                  title={
+                    card.example
+                      ? (showExampleHint ? 'Hide example' : 'Show example sentence (hint)')
+                      : 'No example saved — add one in Vocabulary'
+                  }
+                  className={`p-2.5 rounded-lg transition-colors touch-manipulation min-h-[44px] min-w-[44px] flex items-center justify-center ${
+                    card.example
+                      ? showExampleHint
+                        ? 'text-amber-400 bg-amber-500/15 ring-1 ring-amber-500/30'
+                        : 'text-gray-400 hover:text-amber-400 hover:bg-gray-800'
+                      : 'text-gray-600 cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  <Lightbulb size={22} className={showExampleHint ? 'fill-amber-400/30' : ''} strokeWidth={2} />
+                </button>
+              </div>
             )}
+            <div className="px-4 py-5 md:px-6 md:py-8 text-center">
+              {card.type === 'strong_verb' ? (
+                <>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">
+                    {verbQuestionType === 'partizip' ? 'Partizip II (Perfekt)' : 'Präteritum'}
+                  </p>
+                  <p className="text-xl md:text-2xl font-bold text-amber-300">{card.infinitive}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 md:mb-3">{direction === 'de_to_en' ? 'Translate to English' : 'Translate to German'}</p>
+                  <p className="text-xl md:text-2xl font-bold text-amber-300 pr-10 md:pr-0">{(card.prompt && card.prompt.includes(': ')) ? card.prompt.split(': ')[1] : (direction === 'de_to_en' ? card.word : card.translation)}</p>
+                  {showExampleHint && card.example && (
+                    <p className="mt-4 mx-auto max-w-md text-left sm:text-center text-sm text-gray-300 leading-relaxed border-t border-gray-800 pt-4 px-1">
+                      <span className="text-gray-500 not-italic text-xs uppercase tracking-wide block mb-1.5">Example</span>
+                      <span className="italic">{card.example}</span>
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <form onSubmit={handleSubmit} className="px-4 pb-4 md:px-6 md:pb-6 flex gap-2">
             <input

@@ -62,6 +62,7 @@ def next_flashcard(
         word=picked.word,
         translation=picked.translation,
         prompt=prompt,
+        example=picked.example,
     )
 
 

@@ -121,6 +121,7 @@ class FlashcardQuestion(BaseModel):
     word: str
     translation: str
     prompt: str
+    example: str | None = None
 
 
 class FlashcardAnswer(BaseModel):
